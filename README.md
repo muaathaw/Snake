@@ -1,8 +1,8 @@
 Snake (x86-64 assembly, GNU as, AT&T syntax)
-
+============================================
 Muaath Awad Muaw22
 Oskar Ohvo osoh22
-
+=================
 Desired grade (B/A)
 ============================================
 
