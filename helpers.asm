@@ -78,19 +78,30 @@ board_put_char:
         .type board_put_str, @function
 board_put_str:
         pushq   %rbx
+        pushq   %r12
+        subq    $8, %rsp
         movq    %rdx, %rbx
+        movl    %edi, %r12d
         movl    %edi, %edx
         movq    stdscr@GOTPCREL(%rip), %rax
         movq    (%rax), %rdi
         call    wmove@PLT
         movq    stdscr@GOTPCREL(%rip), %rax
         movq    (%rax), %rdi
+        call    getmaxx@PLT
+        subl    %r12d, %eax
+        jns     1f
+        xorl    %eax, %eax
+1:      movl    %eax, %edx
+        movq    stdscr@GOTPCREL(%rip), %rax
+        movq    (%rax), %rdi
         movq    %rbx, %rsi
-        movl    $-1, %edx
         call    waddnstr@PLT
         movq    stdscr@GOTPCREL(%rip), %rax
         movq    (%rax), %rdi
         call    wrefresh@PLT
+        addq    $8, %rsp
+        popq    %r12
         popq    %rbx
         ret
         .size board_put_str, .-board_put_str

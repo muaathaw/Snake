@@ -1,6 +1,3 @@
-# Snake
-Unix assignment 3
-
 Snake (x86-64 assembly, GNU as, AT&T syntax)
 Muaath Awad Muaw22
 Oskar Ohvo osoh22
@@ -9,16 +6,16 @@ Desired grade (B/A)
 
 ## Build
 -----
+
     make                builds ./snake (_start in start.asm)
                         and    ./snake_c (main in main.c)
     make HELPERS=c      links helpers.c instead of helpers.asm
     make clean          removes objects and binaries
 
 ## Run
----
+-----
     ./snake 5 2
     ./snake_c 5 2
-
 
 ## Files
 -----
@@ -27,8 +24,9 @@ Desired grade (B/A)
     snake.asm    game logic, start_game(len, n_apples)
     helpers.asm  ncurses wrappers
     helpers.c    C version of the same helpers
------
+
 ## Supported features:
+-----
     - Playable snake game
     - Configurable initial length and number of apples via command line
     - Arrow-key control, cannot reverse
@@ -40,8 +38,9 @@ Desired grade (B/A)
     - 30 s timer, reset per apple
     - Helper functions implemented in assembly (helpers.asm); Makefile builds them by default
     - Starts from assembly (_start) and C (main.c)
+
+Approach:
 -----
-## Approach:
     start.asm reads argc/argv, parses the optional length and apple count and
     calls start_game(len, n_apples). The game state lives in .bss (snake body
     coordinates, apple coordinates, direction, score, delay, elapsed time).

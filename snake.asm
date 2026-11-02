@@ -2,10 +2,12 @@
 #
 # void start_game(int len, int n_apples);
 
-        .equ WIDTH,       40
-        .equ HEIGHT,      20
-        .equ MAX_LEN,     WIDTH*HEIGHT
+        .equ MAX_WIDTH,   40
+        .equ MAX_HEIGHT,  20
+        .equ MAX_LEN,     MAX_WIDTH*MAX_HEIGHT
         .equ MAX_APPLES,  100
+        .equ MIN_WIDTH,   10
+        .equ MIN_HEIGHT,  5
 
         .equ KEY_DOWN,    258
         .equ KEY_UP,      259
@@ -25,6 +27,8 @@
         .section .rodata
 status_fmt:
         .asciz "Score: %-4d Length: %-4d Time left: %2d s "
+too_small_msg:
+        .asciz "Terminal too small: the game needs at least 12 columns and 9 rows."
 
         .bss
         .align 4
@@ -32,6 +36,8 @@ snake_x:    .space 4*MAX_LEN
 snake_y:    .space 4*MAX_LEN
 apple_x:    .space 4*MAX_APPLES
 apple_y:    .space 4*MAX_APPLES
+board_w:    .space 4
+board_h:    .space 4
 snake_len:  .space 4
 n_apples:   .space 4
 dir_x:      .space 4
@@ -51,25 +57,68 @@ start_game:
         pushq   %rbp
         movq    %rsp, %rbp
         pushq   %rbx
+        pushq   %r12
+        pushq   %r13
         subq    $8, %rsp
 
-        # length in [1, WIDTH/2]
-        cmpl    $1, %edi
-        jge     1f
-        movl    $1, %edi
-1:      cmpl    $WIDTH/2, %edi
-        jle     2f
-        movl    $WIDTH/2, %edi
-2:      movl    %edi, snake_len(%rip)
+        movl    %edi, %r12d
+        movl    %esi, %r13d
 
-        # apples in [1, MAX_APPLES]
-        cmpl    $1, %esi
+        call    board_init@PLT
+
+        # playfield width fits the terminal, max 40
+        movq    stdscr@GOTPCREL(%rip), %rax
+        movq    (%rax), %rdi
+        call    getmaxx@PLT
+        movl    %eax, %ebx
+        cmpl    $(MIN_WIDTH+2), %ebx
+        jl      .Ltoo_small
+        subl    $2, %ebx
+        cmpl    $MAX_WIDTH, %ebx
+        jle     1f
+        movl    $MAX_WIDTH, %ebx
+1:      movl    %ebx, board_w(%rip)
+
+        # playfield height fits the terminal, max 20
+        movq    stdscr@GOTPCREL(%rip), %rax
+        movq    (%rax), %rdi
+        call    getmaxy@PLT
+        movl    %eax, %ebx
+        cmpl    $(MIN_HEIGHT+4), %ebx
+        jl      .Ltoo_small
+        subl    $4, %ebx
+        cmpl    $MAX_HEIGHT, %ebx
+        jle     2f
+        movl    $MAX_HEIGHT, %ebx
+2:      movl    %ebx, board_h(%rip)
+
+        # length in [1, board_w/2]
+        movl    %r12d, %edi
+        cmpl    $1, %edi
         jge     3f
-        movl    $1, %esi
-3:      cmpl    $MAX_APPLES, %esi
+        movl    $1, %edi
+3:      movl    board_w(%rip), %eax
+        shrl    $1, %eax
+        cmpl    %eax, %edi
         jle     4f
+        movl    %eax, %edi
+4:      movl    %edi, snake_len(%rip)
+
+        # apples in [1, min(MAX_APPLES, board cells - snake length)]
+        movl    %r13d, %esi
+        cmpl    $1, %esi
+        jge     5f
+        movl    $1, %esi
+5:      cmpl    $MAX_APPLES, %esi
+        jle     6f
         movl    $MAX_APPLES, %esi
-4:      movl    %esi, n_apples(%rip)
+6:      movl    board_w(%rip), %eax
+        imull   board_h(%rip), %eax
+        subl    snake_len(%rip), %eax
+        cmpl    %eax, %esi
+        jle     7f
+        movl    %eax, %esi
+7:      movl    %esi, n_apples(%rip)
 
         movl    $1, dir_x(%rip)
         movl    $0, dir_y(%rip)
@@ -79,7 +128,6 @@ start_game:
         movl    $0, elapsed(%rip)
         movl    $START_DELAY, delay(%rip)
 
-        call    board_init@PLT
         call    draw_border
         call    init_snake
 
@@ -108,10 +156,19 @@ start_game:
         call    usleep@PLT
         jmp     .Lgame_loop
 
+.Ltoo_small:
+        call    endwin@PLT
+        leaq    too_small_msg(%rip), %rdi
+        call    puts@PLT
+        movl    $1, %edi
+        call    exit@PLT
+
 .Lgame_over:
         call    game_exit@PLT
 
         addq    $8, %rsp
+        popq    %r13
+        popq    %r12
         popq    %rbx
         popq    %rbp
         ret
@@ -121,26 +178,30 @@ start_game:
 draw_border:
         pushq   %rbx
         xorl    %ebx, %ebx
-1:      cmpl    $WIDTH+1, %ebx
+1:      movl    board_w(%rip), %eax
+        incl    %eax
+        cmpl    %eax, %ebx
         jg      2f
         movl    %ebx, %edi
         movl    $0, %esi
         movl    $CH_WALL, %edx
         call    board_put_char@PLT
         movl    %ebx, %edi
-        movl    $HEIGHT+1, %esi
+        movl    board_h(%rip), %esi
+        incl    %esi
         movl    $CH_WALL, %edx
         call    board_put_char@PLT
         incl    %ebx
         jmp     1b
 2:      movl    $1, %ebx
-3:      cmpl    $HEIGHT, %ebx
+3:      cmpl    board_h(%rip), %ebx
         jg      4f
         movl    $0, %edi
         movl    %ebx, %esi
         movl    $CH_WALL, %edx
         call    board_put_char@PLT
-        movl    $WIDTH+1, %edi
+        movl    board_w(%rip), %edi
+        incl    %edi
         movl    %ebx, %esi
         movl    $CH_WALL, %edx
         call    board_put_char@PLT
@@ -149,15 +210,17 @@ draw_border:
 4:      popq    %rbx
         ret
 
-# init_snake: horizontal in the middle, head at WIDTH/2
+# init_snake: horizontal in the middle, head at board_w/2
 init_snake:
         pushq   %rbx
         xorl    %ebx, %ebx
 1:      cmpl    snake_len(%rip), %ebx
         jge     3f
-        movl    $WIDTH/2, %edi
+        movl    board_w(%rip), %edi
+        shrl    $1, %edi
         subl    %ebx, %edi
-        movl    $HEIGHT/2, %esi
+        movl    board_h(%rip), %esi
+        shrl    $1, %esi
         leaq    snake_x(%rip), %rax
         movl    %edi, (%rax,%rbx,4)
         leaq    snake_y(%rip), %rax
@@ -174,8 +237,12 @@ init_snake:
 
 # read_input: drain keys, reject reversing the last move
 read_input:
-        subq    $8, %rsp
+        pushq   %rbx
+        movl    $64, %ebx
 .Lread_loop:
+        testl   %ebx, %ebx
+        jle     .Lread_done
+        decl    %ebx
         call    board_get_key@PLT
         cmpl    $-1, %eax
         je      .Lread_done
@@ -209,18 +276,25 @@ read_input:
         movl    dir_x(%rip), %eax
         negl    %eax
         cmpl    %eax, %ecx
-        jne     .Lkey_accept
+        jne     .Lkey_forward
         movl    dir_y(%rip), %eax
         negl    %eax
         cmpl    %eax, %edx
         je      .Lread_loop
+.Lkey_forward:
+        # drop repeats of the current direction so they cannot flood the
+        # input buffer and delay a later turn
+        cmpl    dir_x(%rip), %ecx
+        jne     .Lkey_accept
+        cmpl    dir_y(%rip), %edx
+        je      .Lread_loop
 .Lkey_accept:
         movl    %ecx, next_dx(%rip)
         movl    %edx, next_dy(%rip)
-        jmp     .Lread_loop
+        jmp     .Lread_done
 
 .Lread_done:
-        addq    $8, %rsp
+        popq    %rbx
         ret
 
 # int move_snake(void) - 1 while alive, 0 on game over
@@ -241,11 +315,11 @@ move_snake:
 
         cmpl    $1, %r12d
         jl      .Ldead
-        cmpl    $WIDTH, %r12d
+        cmpl    board_w(%rip), %r12d
         jg      .Ldead
         cmpl    $1, %r13d
         jl      .Ldead
-        cmpl    $HEIGHT, %r13d
+        cmpl    board_h(%rip), %r13d
         jg      .Ldead
 
         # body check, tail excluded since it moves away
@@ -276,7 +350,9 @@ move_snake:
         jmp     .Lshift
 
 .Lgrow:
-        cmpl    $MAX_LEN, snake_len(%rip)
+        movl    board_w(%rip), %eax
+        imull   board_h(%rip), %eax
+        cmpl    %eax, snake_len(%rip)
         jge     1f
         incl    snake_len(%rip)
 1:      incl    score(%rip)
@@ -318,7 +394,8 @@ move_snake:
         # respawn the eaten apple if the board still has a free cell
         cmpl    $-1, %ebx
         je      6f
-        movl    $WIDTH*HEIGHT, %eax
+        movl    board_w(%rip), %eax
+        imull   board_h(%rip), %eax
         subl    snake_len(%rip), %eax
         subl    n_apples(%rip), %eax
         cmpl    $1, %eax
@@ -383,12 +460,12 @@ place_apple:
 .Lretry:
         call    rand@PLT
         xorl    %edx, %edx
-        movl    $WIDTH, %ecx
+        movl    board_w(%rip), %ecx
         divl    %ecx
         leal    1(%rdx), %r12d
         call    rand@PLT
         xorl    %edx, %edx
-        movl    $HEIGHT, %ecx
+        movl    board_h(%rip), %ecx
         divl    %ecx
         leal    1(%rdx), %r13d
 
@@ -438,7 +515,8 @@ draw_status:
         call    sprintf@PLT
 
         movl    $0, %edi
-        movl    $HEIGHT+2, %esi
+        movl    board_h(%rip), %esi
+        addl    $2, %esi
         leaq    status_buf(%rip), %rdx
         call    board_put_str@PLT
         addq    $8, %rsp

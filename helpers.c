@@ -33,6 +33,9 @@ void board_put_char(int x, int y, int ch)
 
 void board_put_str(int x, int y, const char *str)
 {
-    mvaddstr(y, x, str);
+    int n = COLS - x;
+    if (n < 0)
+        n = 0;
+    mvaddnstr(y, x, str, n);
     refresh();
 }
